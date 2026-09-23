@@ -1,0 +1,62 @@
+<Layouts.app flash={@flash} current_scope={@current_scope}>
+  <div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+    <section class="flex flex-col items-center gap-8 text-center">
+      <header class="space-y-2">
+        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl">Clickboard</h1>
+        <p class="text-base-content/70">
+          Every click is a point. How high can you climb?
+        </p>
+      </header>
+
+      <button
+        id="click-button"
+        type="button"
+        phx-click="click"
+        class="group relative flex size-56 select-none items-center justify-center rounded-full bg-gradient-to-br from-primary to-secondary text-2xl font-bold text-primary-content shadow-xl transition duration-150 ease-out hover:scale-105 hover:shadow-2xl focus:outline-none focus-visible:ring-4 focus-visible:ring-primary/40 active:scale-95 active:shadow-none sm:size-64"
+      >
+        <span class="pointer-events-none absolute inset-0 rounded-full bg-white/10 opacity-0 transition group-hover:opacity-100" />
+        Click Me!
+      </button>
+
+      <div class="flex flex-col items-center gap-1">
+        <span class="text-xs font-medium uppercase tracking-widest text-base-content/60">
+          Your score
+        </span>
+        <span id="my-score" class="text-5xl font-bold tabular-nums">{@current_count}</span>
+      </div>
+    </section>
+
+    <section class="rounded-2xl border border-base-300 bg-base-100 p-5 shadow-sm">
+      <header class="mb-4 flex items-center gap-2">
+        <.icon name="hero-trophy" class="size-5 text-warning" />
+        <h2 class="text-lg font-semibold">Leaderboard</h2>
+      </header>
+
+      <ol id="leaderboard" phx-update="stream" class="space-y-1">
+        <li
+          id="leaderboard-empty"
+          class="hidden only:block py-8 text-center text-sm text-base-content/60"
+        >
+          No clicks yet. Be the first to score!
+        </li>
+        <li
+          :for={{dom_id, entry} <- @streams.leaderboard}
+          id={dom_id}
+          class={[
+            "flex items-center gap-3 rounded-xl px-3 py-2 transition",
+            entry.id == @current_user_id && "bg-primary/10 ring-1 ring-primary/30"
+          ]}
+        >
+          <span class="w-6 text-right text-sm font-semibold tabular-nums text-base-content/60">
+            {entry.rank}
+          </span>
+          <span class="min-w-0 flex-1 truncate text-sm font-medium">
+            {entry.email}
+            <span :if={entry.id == @current_user_id} class="text-primary">(you)</span>
+          </span>
+          <span class="text-sm font-bold tabular-nums">{entry.count}</span>
+        </li>
+      </ol>
+    </section>
+  </div>
+</Layouts.app>
