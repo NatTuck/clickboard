@@ -19,7 +19,7 @@ defmodule ClickboardWeb.UserLive.Settings do
       <.form for={@email_form} id="email_form" phx-submit="update_email" phx-change="validate_email">
         <.input
           field={@email_form[:email]}
-          type="email"
+          type="text"
           label="Email"
           autocomplete="username"
           spellcheck="false"
@@ -70,19 +70,6 @@ defmodule ClickboardWeb.UserLive.Settings do
   end
 
   @impl true
-  def mount(%{"token" => token}, _session, socket) do
-    socket =
-      case Users.update_user_email(socket.assigns.current_scope.user, token) do
-        {:ok, _user} ->
-          put_flash(socket, :info, "Email changed successfully.")
-
-        {:error, _} ->
-          put_flash(socket, :error, "Email change link is invalid or it has expired.")
-      end
-
-    {:ok, push_navigate(socket, to: ~p"/users/settings")}
-  end
-
   def mount(_params, _session, socket) do
     user = socket.assigns.current_scope.user
     email_changeset = Users.change_user_email(user, %{}, validate_unique: false)
@@ -116,18 +103,16 @@ defmodule ClickboardWeb.UserLive.Settings do
     user = socket.assigns.current_scope.user
     true = Users.sudo_mode?(user)
 
-    case Users.change_user_email(user, user_params) do
-      %{valid?: true} = changeset ->
-        Users.deliver_user_update_email_instructions(
-          Ecto.Changeset.apply_action!(changeset, :insert),
-          user.email,
-          &url(~p"/users/settings/confirm-email/#{&1}")
-        )
+    case Users.update_user_email(user, user_params) do
+      {:ok, user} ->
+        {:noreply,
+         socket
+         |> assign(:current_scope, Clickboard.Users.Scope.for_user(user))
+         |> assign(:current_email, user.email)
+         |> assign(:email_form, to_form(Users.change_user_email(user, %{})))
+         |> put_flash(:info, "Email updated successfully.")}
 
-        info = "A link to confirm your email change has been sent to the new address."
-        {:noreply, socket |> put_flash(:info, info)}
-
-      changeset ->
+      {:error, changeset} ->
         {:noreply, assign(socket, :email_form, to_form(changeset, action: :insert))}
     end
   end

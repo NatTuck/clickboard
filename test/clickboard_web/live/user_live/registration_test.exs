@@ -22,16 +22,16 @@ defmodule ClickboardWeb.UserLive.RegistrationTest do
       assert {:ok, _conn} = result
     end
 
-    test "renders errors for invalid data", %{conn: conn} do
+    test "renders errors for an empty email", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/users/register")
 
       result =
         lv
         |> element("#registration_form")
-        |> render_change(user: %{"email" => "with spaces"})
+        |> render_change(user: %{"email" => ""})
 
       assert result =~ "Register"
-      assert result =~ "must have the @ sign and no spaces"
+      assert result =~ "blank"
     end
   end
 
@@ -48,22 +48,23 @@ defmodule ClickboardWeb.UserLive.RegistrationTest do
 
       assert redirected_to(conn) == ~p"/"
       assert get_session(conn, :user_token)
-      assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "Account created successfully"
+      assert Clickboard.Users.get_user_by_email(email)
     end
 
-    test "renders errors for duplicated email", %{conn: conn} do
+    test "logs in an already registered user", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/users/register")
 
       user = user_fixture(%{email: "test@email.com"})
 
-      result =
-        lv
-        |> form("#registration_form",
-          user: %{"email" => user.email}
-        )
-        |> render_submit()
+      form =
+        form(lv, "#registration_form", user: %{"email" => user.email})
 
-      assert result =~ "has already been taken"
+      render_submit(form)
+
+      conn = follow_trigger_action(form, conn)
+
+      assert redirected_to(conn) == ~p"/"
+      assert get_session(conn, :user_token)
     end
   end
 

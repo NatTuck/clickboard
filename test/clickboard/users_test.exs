@@ -17,23 +17,30 @@ defmodule Clickboard.UsersTest do
     end
   end
 
-  describe "get_user_by_email_and_password/2" do
-    test "does not return the user if the email does not exist" do
-      refute Users.get_user_by_email_and_password("unknown@example.com", "hello world!")
+  describe "get_or_create_user_by_email/1" do
+    test "returns an error for a blank email" do
+      assert Users.get_or_create_user_by_email("") == {:error, :blank}
+      assert Users.get_or_create_user_by_email("   ") == {:error, :blank}
+      assert Users.get_or_create_user_by_email(nil) == {:error, :blank}
     end
 
-    test "returns the user regardless of the password" do
-      %{id: id} = user = user_fixture() |> set_password()
+    test "creates a user when the email does not exist" do
+      email = unique_user_email()
 
-      assert %User{id: ^id} =
-               Users.get_user_by_email_and_password(user.email, "invalid")
+      assert {:ok, %User{id: id}} = Users.get_or_create_user_by_email(email)
+      assert %User{id: ^id} = Users.get_user_by_email(email)
     end
 
-    test "returns the user if the email and password are valid" do
-      %{id: id} = user = user_fixture() |> set_password()
+    test "returns the existing user for a known email" do
+      %{id: id} = user = user_fixture()
 
-      assert %User{id: ^id} =
-               Users.get_user_by_email_and_password(user.email, valid_user_password())
+      assert {:ok, %User{id: ^id}} = Users.get_or_create_user_by_email(user.email)
+    end
+
+    test "matches emails case-insensitively" do
+      %{id: id} = user = user_fixture()
+
+      assert {:ok, %User{id: ^id}} = Users.get_or_create_user_by_email(String.upcase(user.email))
     end
   end
 
@@ -57,10 +64,9 @@ defmodule Clickboard.UsersTest do
       assert %{email: ["can't be blank"]} = errors_on(changeset)
     end
 
-    test "validates email when given" do
-      {:error, changeset} = Users.register_user(%{email: "not valid"})
-
-      assert %{email: ["must have the @ sign and no spaces"]} = errors_on(changeset)
+    test "accepts any non-empty email" do
+      {:ok, user} = Users.register_user(%{email: "not an email"})
+      assert user.email == "not an email"
     end
 
     test "validates maximum values for email for security" do
@@ -115,70 +121,27 @@ defmodule Clickboard.UsersTest do
     end
   end
 
-  describe "deliver_user_update_email_instructions/3" do
-    setup do
-      %{user: user_fixture()}
-    end
-
-    test "sends token through notification", %{user: user} do
-      token =
-        extract_user_token(fn url ->
-          Users.deliver_user_update_email_instructions(user, "current@example.com", url)
-        end)
-
-      {:ok, token} = Base.url_decode64(token, padding: false)
-      assert user_token = Repo.get_by(UserToken, token: :crypto.hash(:sha256, token))
-      assert user_token.user_id == user.id
-      assert user_token.sent_to == user.email
-      assert user_token.context == "change:current@example.com"
-    end
-  end
-
   describe "update_user_email/2" do
     setup do
-      user = unconfirmed_user_fixture()
-      email = unique_user_email()
-
-      token =
-        extract_user_token(fn url ->
-          Users.deliver_user_update_email_instructions(%{user | email: email}, user.email, url)
-        end)
-
-      %{user: user, token: token, email: email}
+      %{user: user_fixture(), email: unique_user_email()}
     end
 
-    test "updates the email with a valid token", %{user: user, token: token, email: email} do
-      assert {:ok, %{email: ^email}} = Users.update_user_email(user, token)
-      changed_user = Repo.get!(User, user.id)
-      assert changed_user.email != user.email
-      assert changed_user.email == email
-      refute Repo.get_by(UserToken, user_id: user.id)
+    test "updates the email", %{user: user, email: email} do
+      assert {:ok, %{email: ^email}} = Users.update_user_email(user, %{email: email})
+      assert Repo.get!(User, user.id).email == email
     end
 
-    test "does not update email with invalid token", %{user: user} do
-      assert Users.update_user_email(user, "oops") ==
-               {:error, :transaction_aborted}
+    test "does not update email to a duplicate", %{user: user} do
+      other = user_fixture()
 
+      assert {:error, changeset} = Users.update_user_email(user, %{email: other.email})
+      assert "has already been taken" in errors_on(changeset).email
       assert Repo.get!(User, user.id).email == user.email
-      assert Repo.get_by(UserToken, user_id: user.id)
     end
 
-    test "does not update email if user email changed", %{user: user, token: token} do
-      assert Users.update_user_email(%{user | email: "current@example.com"}, token) ==
-               {:error, :transaction_aborted}
-
-      assert Repo.get!(User, user.id).email == user.email
-      assert Repo.get_by(UserToken, user_id: user.id)
-    end
-
-    test "does not update email if token expired", %{user: user, token: token} do
-      {1, nil} = Repo.update_all(UserToken, set: [inserted_at: ~N[2020-01-01 00:00:00]])
-
-      assert Users.update_user_email(user, token) ==
-               {:error, :transaction_aborted}
-
-      assert Repo.get!(User, user.id).email == user.email
-      assert Repo.get_by(UserToken, user_id: user.id)
+    test "does not update email to the same value", %{user: user} do
+      assert {:error, changeset} = Users.update_user_email(user, %{email: user.email})
+      assert "did not change" in errors_on(changeset).email
     end
   end
 
@@ -239,7 +202,7 @@ defmodule Clickboard.UsersTest do
 
       assert expired_tokens == []
       assert is_nil(user.password)
-      assert Users.get_user_by_email_and_password(user.email, "new valid password")
+      assert Users.get_user_by_email(user.email)
     end
 
     test "deletes all tokens for the given user", %{user: user} do
@@ -309,85 +272,12 @@ defmodule Clickboard.UsersTest do
     end
   end
 
-  describe "get_user_by_magic_link_token/1" do
-    setup do
-      user = user_fixture()
-      {encoded_token, _hashed_token} = generate_user_magic_link_token(user)
-      %{user: user, token: encoded_token}
-    end
-
-    test "returns user by token", %{user: user, token: token} do
-      assert session_user = Users.get_user_by_magic_link_token(token)
-      assert session_user.id == user.id
-    end
-
-    test "does not return user for invalid token" do
-      refute Users.get_user_by_magic_link_token("oops")
-    end
-
-    test "does not return user for expired token", %{token: token} do
-      {1, nil} = Repo.update_all(UserToken, set: [inserted_at: ~N[2020-01-01 00:00:00]])
-      refute Users.get_user_by_magic_link_token(token)
-    end
-  end
-
-  describe "login_user_by_magic_link/1" do
-    test "confirms user and expires tokens" do
-      user = unconfirmed_user_fixture()
-      refute user.confirmed_at
-      {encoded_token, hashed_token} = generate_user_magic_link_token(user)
-
-      assert {:ok, {user, [%{token: ^hashed_token}]}} =
-               Users.login_user_by_magic_link(encoded_token)
-
-      assert user.confirmed_at
-    end
-
-    test "returns user and (deleted) token for confirmed user" do
-      user = user_fixture()
-      assert user.confirmed_at
-      {encoded_token, _hashed_token} = generate_user_magic_link_token(user)
-      assert {:ok, {^user, []}} = Users.login_user_by_magic_link(encoded_token)
-      # one time use only
-      assert {:error, :not_found} = Users.login_user_by_magic_link(encoded_token)
-    end
-
-    test "raises when unconfirmed user has password set" do
-      user = unconfirmed_user_fixture()
-      {1, nil} = Repo.update_all(User, set: [hashed_password: "hashed"])
-      {encoded_token, _hashed_token} = generate_user_magic_link_token(user)
-
-      assert_raise RuntimeError, ~r/magic link log in is not allowed/, fn ->
-        Users.login_user_by_magic_link(encoded_token)
-      end
-    end
-  end
-
   describe "delete_user_session_token/1" do
     test "deletes the token" do
       user = user_fixture()
       token = Users.generate_user_session_token(user)
       assert Users.delete_user_session_token(token) == :ok
       refute Users.get_user_by_session_token(token)
-    end
-  end
-
-  describe "deliver_login_instructions/2" do
-    setup do
-      %{user: unconfirmed_user_fixture()}
-    end
-
-    test "sends token through notification", %{user: user} do
-      token =
-        extract_user_token(fn url ->
-          Users.deliver_login_instructions(user, url)
-        end)
-
-      {:ok, token} = Base.url_decode64(token, padding: false)
-      assert user_token = Repo.get_by(UserToken, token: :crypto.hash(:sha256, token))
-      assert user_token.user_id == user.id
-      assert user_token.sent_to == user.email
-      assert user_token.context == "login"
     end
   end
 

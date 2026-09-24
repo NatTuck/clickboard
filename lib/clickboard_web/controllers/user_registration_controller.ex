@@ -5,15 +5,15 @@ defmodule ClickboardWeb.UserRegistrationController do
   alias ClickboardWeb.UserAuth
 
   def create(conn, %{"user" => user_params}) do
-    case Users.register_user(user_params) do
+    case Users.get_or_create_user_by_email(user_params["email"]) do
       {:ok, user} ->
         conn
-        |> put_flash(:info, "Account created successfully.")
+        |> put_flash(:info, "Welcome!")
         |> UserAuth.log_in_user(user, user_params)
 
-      {:error, %Ecto.Changeset{}} ->
+      {:error, _reason} ->
         conn
-        |> put_flash(:error, "Could not create account.")
+        |> put_flash(:error, "Please enter an email address.")
         |> redirect(to: ~p"/users/register")
     end
   end

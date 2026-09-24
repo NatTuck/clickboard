@@ -33,7 +33,7 @@ defmodule ClickboardWeb.UserLive.Registration do
         >
           <.input
             field={@form[:email]}
-            type="email"
+            type="text"
             label="Email"
             autocomplete="username"
             spellcheck="false"
@@ -65,7 +65,7 @@ defmodule ClickboardWeb.UserLive.Registration do
 
   @impl true
   def handle_event("save", %{"user" => user_params}, socket) do
-    case Users.change_user_email(%User{}, user_params) do
+    case Users.change_user_email(%User{}, user_params, validate_unique: false) do
       %{valid?: true} = changeset ->
         {:noreply, socket |> assign(:trigger_submit, true) |> assign_form(changeset)}
 

@@ -10,67 +10,44 @@ defmodule ClickboardWeb.UserLive.LoginTest do
 
       assert html =~ "Log in"
       assert html =~ "Sign up"
-      assert html =~ "Log in with email"
     end
   end
 
-  describe "user login - magic link" do
-    test "sends magic link email when user exists", %{conn: conn} do
+  describe "user login" do
+    test "logs in an existing user", %{conn: conn} do
       user = user_fixture()
 
       {:ok, lv, _html} = live(conn, ~p"/users/log-in")
 
-      {:ok, _lv, html} =
-        form(lv, "#login_form_magic", user: %{email: user.email})
-        |> render_submit()
-        |> follow_redirect(conn, ~p"/users/log-in")
-
-      assert html =~ "If your email is in our system"
-
-      assert Clickboard.Repo.get_by!(Clickboard.Users.UserToken, user_id: user.id).context ==
-               "login"
-    end
-
-    test "does not disclose if user is registered", %{conn: conn} do
-      {:ok, lv, _html} = live(conn, ~p"/users/log-in")
-
-      {:ok, _lv, html} =
-        form(lv, "#login_form_magic", user: %{email: "idonotexist@example.com"})
-        |> render_submit()
-        |> follow_redirect(conn, ~p"/users/log-in")
-
-      assert html =~ "If your email is in our system"
-    end
-  end
-
-  describe "user login - password" do
-    test "redirects if user logs in with valid credentials", %{conn: conn} do
-      user = user_fixture() |> set_password()
-
-      {:ok, lv, _html} = live(conn, ~p"/users/log-in")
-
-      form =
-        form(lv, "#login_form_password",
-          user: %{email: user.email, password: valid_user_password(), remember_me: true}
-        )
+      form = form(lv, "#login_form", user: %{email: user.email})
 
       conn = submit_form(form, conn)
 
       assert redirected_to(conn) == ~p"/"
     end
 
-    test "redirects to login page with a flash error if credentials are invalid", %{
-      conn: conn
-    } do
+    test "creates and logs in an unknown user", %{conn: conn} do
+      email = unique_user_email()
+
       {:ok, lv, _html} = live(conn, ~p"/users/log-in")
 
-      form =
-        form(lv, "#login_form_password", user: %{email: "test@email.com", password: "123456"})
+      form = form(lv, "#login_form", user: %{email: email})
 
-      render_submit(form, %{user: %{remember_me: true}})
+      conn = submit_form(form, conn)
+
+      assert redirected_to(conn) == ~p"/"
+      assert Clickboard.Users.get_user_by_email(email)
+    end
+
+    test "redirects to login page with a flash error for a blank email", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/users/log-in")
+
+      form = form(lv, "#login_form", user: %{email: ""})
+
+      render_submit(form)
 
       conn = follow_trigger_action(form, conn)
-      assert Phoenix.Flash.get(conn.assigns.flash, :error) == "Invalid email or password"
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) == "Please enter an email address."
       assert redirected_to(conn) == ~p"/users/log-in"
     end
   end
@@ -96,14 +73,12 @@ defmodule ClickboardWeb.UserLive.LoginTest do
     end
 
     test "shows login page with email filled in", %{conn: conn, user: user} do
-      {:ok, _lv, html} = live(conn, ~p"/users/log-in")
+      {:ok, lv, html} = live(conn, ~p"/users/log-in")
 
       assert html =~ "You need to reauthenticate"
       refute html =~ "Register"
-      assert html =~ "Log in with email"
-
-      assert html =~
-               ~s(<input type="email" name="user[email]" id="login_form_magic_email" value="#{user.email}")
+      assert has_element?(lv, "#user_email")
+      assert render(element(lv, "#user_email")) =~ ~s(value="#{user.email}")
     end
   end
 end
