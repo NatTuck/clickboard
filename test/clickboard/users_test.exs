@@ -22,9 +22,11 @@ defmodule Clickboard.UsersTest do
       refute Users.get_user_by_email_and_password("unknown@example.com", "hello world!")
     end
 
-    test "does not return the user if the password is not valid" do
-      user = user_fixture() |> set_password()
-      refute Users.get_user_by_email_and_password(user.email, "invalid")
+    test "returns the user regardless of the password" do
+      %{id: id} = user = user_fixture() |> set_password()
+
+      assert %User{id: ^id} =
+               Users.get_user_by_email_and_password(user.email, "invalid")
     end
 
     test "returns the user if the email and password are valid" do
@@ -77,12 +79,12 @@ defmodule Clickboard.UsersTest do
       assert "has already been taken" in errors_on(changeset).email
     end
 
-    test "registers users without password" do
+    test "registers confirmed users without password" do
       email = unique_user_email()
       {:ok, user} = Users.register_user(valid_user_attributes(email: email))
       assert user.email == email
       assert is_nil(user.hashed_password)
-      assert is_nil(user.confirmed_at)
+      refute is_nil(user.confirmed_at)
       assert is_nil(user.password)
     end
   end

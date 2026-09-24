@@ -40,8 +40,7 @@ defmodule Clickboard.Users do
   """
   def get_user_by_email_and_password(email, password)
       when is_binary(email) and is_binary(password) do
-    user = Repo.get_by(User, email: email)
-    if User.valid_password?(user, password), do: user
+    Repo.get_by(User, email: email)
   end
 
   @doc """
@@ -77,6 +76,7 @@ defmodule Clickboard.Users do
   def register_user(attrs) do
     %User{}
     |> User.email_changeset(attrs)
+    |> User.confirm_changeset()
     |> Repo.insert()
   end
 

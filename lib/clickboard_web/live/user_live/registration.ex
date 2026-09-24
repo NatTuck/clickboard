@@ -22,7 +22,15 @@ defmodule ClickboardWeb.UserLive.Registration do
           </.header>
         </div>
 
-        <.form for={@form} id="registration_form" phx-submit="save" phx-change="validate">
+        <.form
+          for={@form}
+          id="registration_form"
+          action={~p"/users/register"}
+          method="post"
+          phx-submit="save"
+          phx-change="validate"
+          phx-trigger-action={@trigger_submit}
+        >
           <.input
             field={@form[:email]}
             type="email"
@@ -51,29 +59,18 @@ defmodule ClickboardWeb.UserLive.Registration do
   def mount(_params, _session, socket) do
     changeset = Users.change_user_email(%User{}, %{}, validate_unique: false)
 
-    {:ok, assign_form(socket, changeset), temporary_assigns: [form: nil]}
+    {:ok, socket |> assign(:trigger_submit, false) |> assign_form(changeset),
+     temporary_assigns: [form: nil]}
   end
 
   @impl true
   def handle_event("save", %{"user" => user_params}, socket) do
-    case Users.register_user(user_params) do
-      {:ok, user} ->
-        {:ok, _} =
-          Users.deliver_login_instructions(
-            user,
-            &url(~p"/users/log-in/#{&1}")
-          )
+    case Users.change_user_email(%User{}, user_params) do
+      %{valid?: true} = changeset ->
+        {:noreply, socket |> assign(:trigger_submit, true) |> assign_form(changeset)}
 
-        {:noreply,
-         socket
-         |> put_flash(
-           :info,
-           "An email was sent to #{user.email}, please access it to confirm your account."
-         )
-         |> push_navigate(to: ~p"/users/log-in")}
-
-      {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign_form(socket, changeset)}
+      %Ecto.Changeset{} = changeset ->
+        {:noreply, assign_form(socket, Map.put(changeset, :action, :insert))}
     end
   end
 

@@ -24,6 +24,11 @@ defmodule Clickboard.UsersFixtures do
       |> valid_user_attributes()
       |> Users.register_user()
 
+    {:ok, user} =
+      user
+      |> Ecto.Changeset.change(confirmed_at: nil)
+      |> Clickboard.Repo.update()
+
     user
   end
 
