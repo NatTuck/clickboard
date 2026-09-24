@@ -1,0 +1,22 @@
+[Unit]
+Description=Clickboard Phoenix server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/clickboard
+Environment=MIX_ENV=prod
+Environment=PHX_SERVER=true
+Environment=PHX_HOST=clickboard.homework.quest
+Environment=PORT=4309
+Environment=POOL_SIZE=5
+Environment=DATABASE_PATH=%h/clickboard/clickboard.db
+Environment=SECRET_KEY_BASE=Wzk365sgZMO670n7qgEOVj2Wu8o2/9O2ObzKpxtaCLqBizs7MUVoBTyhwxB9etQn
+ExecStart=%h/clickboard/start.sh
+Restart=on-failure
+RestartSec=5
+SyslogIdentifier=clickboard
+
+[Install]
+WantedBy=default.target
